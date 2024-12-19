@@ -3,6 +3,7 @@ using backend.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Newtonsoft.Json;
 using System.Collections.ObjectModel;
 
 namespace backend.Controllers
@@ -244,6 +245,117 @@ namespace backend.Controllers
                 return BadRequest(new { message = "An error occurred while recording the submission.", error = ex.Message });
             }
         }
+
+
+        //[HttpGet("get-record/quizId")]
+        //public async Task<IActionResult> GetQuizRecord([FromQuery] int quizId)
+        //{
+        //    Console.WriteLine("Get Quiz Record called with quiz id as " + quizId);
+        //    if (quizId == null)
+        //    {
+        //        return BadRequest(new { message = "Quiz Id is null", errors = "Quiz Id should not be null" });
+        //    }
+
+        //    try
+        //    {
+        //        var _submission = _context.Submissions.FirstOrDefault(s => s.QuizID == quizId);
+        //        if (_submission == null)
+        //        {
+        //            return BadRequest(new { message = "No Submissions found against mentioned quizId " + quizId, errors = "No records exists in submission table against that quizId" });
+        //        }
+        //        return Ok(new
+        //        {
+        //            message = "Submission returned Success against." + quizId,
+        //            data = new
+        //            {
+
+        //            }
+        //        });
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Console.WriteLine(ex.Message);
+        //        return BadRequest(new { message = "An error occurred while recording the submission.", error = ex.Message });
+        //    }
+        //}
+
+
+        [HttpGet("get-record/quizId")]
+        public async Task<IActionResult> GetQuizRecord([FromQuery] int quizId)
+        {
+            Console.WriteLine("Get Quiz Record called with quiz id as " + quizId);
+
+            if (quizId == 0)
+            {
+                return BadRequest(new
+                {
+                    message = "Quiz Id is null",
+                    errors = "Quiz Id should not be null"
+                });
+            }
+
+            try
+            {
+                // Fetch the submission for the given quiz ID
+                var submission = _context.Submissions.FirstOrDefault(s => s.QuizID == quizId);
+                if (submission == null)
+                {
+                    return BadRequest(new
+                    {
+                        message = "No submissions found for the provided quizId: " + quizId,
+                        errors = "No records exist in the submissions table for that quizId"
+                    });
+                }
+
+                // Deserialize AnsweredQuestions (client handles parsing, so raw JSON is returned)
+                var answeredQuestions = submission.AnsweredQuestions;
+
+                // Extract question IDs from AnsweredQuestions
+                var questionIds = JsonConvert.DeserializeObject<List<dynamic>>(answeredQuestions)
+                    .Select(q => (int)q.questionID).ToList();
+
+                // Fetch questions from the Questions table based on extracted question IDs
+                var questions = _context.Questions
+                    .Where(q => questionIds.Contains(q.QuestionID))
+                    .Select(q => new
+                    {
+                        q.QuestionID,
+                        q.QuestionText,
+                        q.Options,        // Return raw JSON for options
+                        q.CorrectAnswer   // Correct answer for the question
+                    })
+                    .ToList();
+
+                // Construct the response payload
+                return Ok(new
+                {
+                    message = "Submission data retrieved successfully for quizId: " + quizId,
+                    data = new
+                    {
+                        submissionId = submission.SubmissionID,
+                        userId = submission.UserId,
+                        categoryId = submission.CategoryID,
+                        quizId = submission.QuizID,
+                        marksObtained = submission.MarksObtained,
+                        totalMarks = submission.TotalMarks,
+                        startTime = submission.StartTime,
+                        endTime = submission.EndTime,
+                        answeredQuestions = answeredQuestions, // Raw JSON to be parsed on the client
+                        questions = questions                  // Question details
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return BadRequest(new
+                {
+                    message = "An error occurred while retrieving the submission data.",
+                    error = ex.Message
+                });
+            }
+        }
+
 
     }
 }

@@ -33,12 +33,30 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("ReactApp", policyBuilder =>
+    //options.AddPolicy("ReactApp", policyBuilder =>
+    //{
+    //    policyBuilder.WithOrigins("http://localhost:5173")
+    //        .AllowAnyMethod()
+    //        .AllowAnyHeader()
+    //        .AllowCredentials();
+    //});
+    //options.AddPolicy("ViteApp", policyBuilder =>
+    //{
+    //    policyBuilder.WithOrigins("https://bytequiz-byteslasher.vercel.app")
+    //        .AllowAnyMethod()
+    //        .AllowAnyHeader()
+    //        .AllowCredentials();
+    //});
+
+    options.AddPolicy("AllowSpecificOrigins", policyBuilder =>
     {
-        policyBuilder.WithOrigins("http://localhost:5173")
+        policyBuilder.WithOrigins(
+                "http://localhost:5173", // Local React dev server
+                "https://bytequiz-byteslasher.vercel.app" // Deployed Vite frontend
+            )
             .AllowAnyMethod()
             .AllowAnyHeader()
-            .AllowCredentials();
+            .AllowCredentials(); // Enable credentials if using cookies
     });
 });
 
@@ -59,6 +77,9 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.UseCors("ReactApp");
+//app.UseCors("ReactApp");
+//app.UseCors("ViteApp");
+
+app.UseCors("AllowSpecificOrigins");
 
 app.Run();
