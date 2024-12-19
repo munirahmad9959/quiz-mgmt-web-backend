@@ -3,7 +3,9 @@ using backend.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Collections.ObjectModel;
 
 namespace backend.Controllers
@@ -34,7 +36,6 @@ namespace backend.Controllers
             }
         }
 
-
         [HttpGet("all-quizzes"), Authorize(Roles = "Teacher")]
         public IActionResult GetQuizzes()
         {
@@ -59,7 +60,6 @@ namespace backend.Controllers
                 return BadRequest(ex.Message);
             }
         }
-
 
         [HttpGet("user"), Authorize(Roles = "Student")]
         public IActionResult GetQuizzesById()
@@ -102,7 +102,6 @@ namespace backend.Controllers
                 });
             }
         }
-
 
         [HttpGet("category"), Authorize]
         public IActionResult GetQuizzesByCategory([FromQuery] string categoryName)
@@ -195,7 +194,6 @@ namespace backend.Controllers
             }
         }
 
-
         [HttpPost("record/submission")]
         public async Task<IActionResult> RecordSubmission([FromBody] SubmissionDto submission)
         {
@@ -245,39 +243,6 @@ namespace backend.Controllers
                 return BadRequest(new { message = "An error occurred while recording the submission.", error = ex.Message });
             }
         }
-
-
-        //[HttpGet("get-record/quizId")]
-        //public async Task<IActionResult> GetQuizRecord([FromQuery] int quizId)
-        //{
-        //    Console.WriteLine("Get Quiz Record called with quiz id as " + quizId);
-        //    if (quizId == null)
-        //    {
-        //        return BadRequest(new { message = "Quiz Id is null", errors = "Quiz Id should not be null" });
-        //    }
-
-        //    try
-        //    {
-        //        var _submission = _context.Submissions.FirstOrDefault(s => s.QuizID == quizId);
-        //        if (_submission == null)
-        //        {
-        //            return BadRequest(new { message = "No Submissions found against mentioned quizId " + quizId, errors = "No records exists in submission table against that quizId" });
-        //        }
-        //        return Ok(new
-        //        {
-        //            message = "Submission returned Success against." + quizId,
-        //            data = new
-        //            {
-
-        //            }
-        //        });
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        Console.WriteLine(ex.Message);
-        //        return BadRequest(new { message = "An error occurred while recording the submission.", error = ex.Message });
-        //    }
-        //}
 
 
         [HttpGet("get-record/quizId")]
@@ -351,6 +316,323 @@ namespace backend.Controllers
                 return BadRequest(new
                 {
                     message = "An error occurred while retrieving the submission data.",
+                    error = ex.Message
+                });
+            }
+        }
+
+
+        [HttpGet("get-quizzes/catName")]
+        public async Task<IActionResult> GetQuizzesfromDb([FromQuery] string catName)
+        {
+            Console.WriteLine("Get Quizzes from Db called with category name: " + catName);
+            if (string.IsNullOrWhiteSpace(catName))
+            {
+                return BadRequest(new
+                {
+                    message = "Category name is null or empty",
+                    errors = "Category name should not be null or empty"
+                });
+            }
+
+            try
+            {
+                // Fetch the questions for the given category name
+                var quizResults = _context.Questions
+                    .Where(q => q.Category.Name == catName) // Filter by Category Name
+                    .Select(q => new
+                    {
+                        QuestionID = q.QuestionID,
+                        CatName = q.Category.Name,
+                        Quest = q.QuestionText,
+                        Options = q.Options,
+                        CorrectOptions = q.CorrectAnswer
+                    })
+                    .ToList();
+
+                if (!quizResults.Any())
+                {
+                    return NotFound(new
+                    {
+                        message = "No quizzes found for the given category name.",
+                        data = quizResults
+                    });
+                }
+
+                // Construct the response payload
+                return Ok(new
+                {
+                    message = "Submission data retrieved successfully for category name: " + catName,
+                    data = quizResults
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return BadRequest(new
+                {
+                    message = "An error occurred while retrieving the submission data.",
+                    error = ex.Message
+                });
+            }
+        }
+
+
+        [HttpPost("add-quizzes/catName")]
+        public async Task<IActionResult> AddQuizzestoDb([FromQuery] string catName, [FromBody] AddQuizDto quizData)
+        {
+            Console.WriteLine("Received quiz data for category: " + catName);
+
+            // Validate category name
+            if (string.IsNullOrWhiteSpace(catName))
+            {
+                return BadRequest(new
+                {
+                    message = "Category name is null or empty",
+                    errors = "Category name should not be null or empty"
+                });
+            }
+
+            // Validate quiz data
+            if (string.IsNullOrWhiteSpace(quizData.QuestionText))
+            {
+                return BadRequest(new
+                {
+                    message = "Question text is null or empty",
+                    errors = "Question text should not be null or empty"
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(quizData.CorrectAnswer))
+            {
+                return BadRequest(new
+                {
+                    message = "Correct answer is null or empty",
+                    errors = "Correct answer should not be null or empty"
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(quizData.Options) || !IsValidJson(quizData.Options))
+            {
+                return BadRequest(new
+                {
+                    message = "Options are not valid JSON.",
+                    errors = "Ensure the options are a valid JSON string."
+                });
+            }
+
+            try
+            {
+                var category = _context.Categories.FirstOrDefault(c => c.Name == catName);
+
+                if (category == null)
+                {
+                    return NotFound(new
+                    {
+                        message = "Category not found",
+                        errors = $"No category found with the name '{catName}'"
+                    });
+                }
+
+                // Create new Question entity
+                var newQuestion = new Question
+                {
+                    CategoryID = category.CategoryID,
+                    QuestionText = quizData.QuestionText,
+                    Options = quizData.Options,
+                    CorrectAnswer = quizData.CorrectAnswer
+                };
+
+                // Add new Question to the database
+                _context.Questions.Add(newQuestion);
+                await _context.SaveChangesAsync();
+
+                // Return success response
+                return Ok(new
+                {
+                    message = "Quiz added successfully",
+                    questionID = newQuestion.QuestionID,
+                    categoryName = category.Name,
+                    questionText = newQuestion.QuestionText,
+                    correctAnswer = newQuestion.CorrectAnswer
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return StatusCode(500, new
+                {
+                    message = "Internal server error occurred.",
+                    error = ex.Message
+                });
+            }
+        }
+
+        private bool IsValidJson(string json)
+        {
+            try
+            {
+                JToken.Parse(json);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+
+        [HttpPost("edit-quizzes/catName")]
+        public async Task<IActionResult> EditQuizzesinDb([FromQuery] string catName, [FromBody] EditQuizDto quizData)
+        {
+            Console.WriteLine($"Received quiz data for editing with category name: {catName}");
+
+            // Step 1: Validate category name
+            if (string.IsNullOrWhiteSpace(catName))
+            {
+                return BadRequest(new
+                {
+                    message = "Category name is null or empty",
+                    errors = "Category name should not be null or empty"
+                });
+            }
+
+            // Step 2: Validate quiz data
+            if (quizData.QuestionID <= 0)
+            {
+                return BadRequest(new
+                {
+                    message = "Invalid QuestionID",
+                    errors = "QuestionID must be a valid positive integer"
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(quizData.QuestionText))
+            {
+                return BadRequest(new
+                {
+                    message = "Question text is null or empty",
+                    errors = "Question text should not be null or empty"
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(quizData.CorrectAnswer))
+            {
+                return BadRequest(new
+                {
+                    message = "Correct answer is null or empty",
+                    errors = "Correct answer should not be null or empty"
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(quizData.Options) || !IsValidJson(quizData.Options))
+            {
+                return BadRequest(new
+                {
+                    message = "Options are not valid JSON.",
+                    errors = "Ensure the options are a valid JSON string."
+                });
+            }
+
+            try
+            {
+                // Step 3: Validate category
+                var category = await _context.Categories.FirstOrDefaultAsync(c => c.Name == catName);
+                if (category == null)
+                {
+                    return NotFound(new
+                    {
+                        message = "Category not found",
+                        errors = $"No category found with the name '{catName}'"
+                    });
+                }
+
+                // Step 4: Validate question existence
+                var existingQuestion = await _context.Questions.FirstOrDefaultAsync(q => q.QuestionID == quizData.QuestionID);
+                if (existingQuestion == null)
+                {
+                    return NotFound(new
+                    {
+                        message = "Question not found",
+                        errors = $"No question found with the ID '{quizData.QuestionID}'"
+                    });
+                }
+
+                // Step 5: Update question
+                existingQuestion.CategoryID = category.CategoryID; // Update the category
+                existingQuestion.QuestionText = quizData.QuestionText;
+                existingQuestion.Options = quizData.Options;
+                existingQuestion.CorrectAnswer = quizData.CorrectAnswer;
+
+                // Save changes to the database
+                await _context.SaveChangesAsync();
+
+                // Step 6: Return success response
+                return Ok(new
+                {
+                    message = "Quiz updated successfully",
+                    questionID = existingQuestion.QuestionID,
+                    categoryName = category.Name,
+                    questionText = existingQuestion.QuestionText,
+                    correctAnswer = existingQuestion.CorrectAnswer
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error while editing quiz: {ex.Message}");
+                return StatusCode(500, new
+                {
+                    message = "Internal server error occurred.",
+                    error = ex.Message
+                });
+            }
+        }
+
+        [HttpDelete("delete/quiz/{quizId}")] // Corrected route
+        public async Task<IActionResult> DeleteQuizfromDb(int quizId) // Removed FromQuery attribute
+        {
+            Console.WriteLine($"Received request to delete quiz with ID: {quizId}");
+
+            // Step 1: Validate quizId
+            if (quizId <= 0)
+            {
+                return BadRequest(new
+                {
+                    message = "Invalid Quiz ID",
+                    errors = "Quiz ID must be a valid positive integer"
+                });
+            }
+
+            try
+            {
+                // Step 2: Find the quiz by ID
+                var existingQuiz = await _context.Questions.FirstOrDefaultAsync(q => q.QuestionID == quizId);
+                if (existingQuiz == null)
+                {
+                    return NotFound(new
+                    {
+                        message = "Quiz not found",
+                        errors = $"No quiz found with the ID '{quizId}'"
+                    });
+                }
+
+                // Step 3: Remove the quiz
+                _context.Questions.Remove(existingQuiz);
+                await _context.SaveChangesAsync();
+
+                // Step 4: Return success response
+                return Ok(new
+                {
+                    message = "Quiz deleted successfully",
+                    quizId = quizId
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error while deleting quiz: {ex.Message}");
+                return StatusCode(500, new
+                {
+                    message = "Internal server error occurred.",
                     error = ex.Message
                 });
             }
