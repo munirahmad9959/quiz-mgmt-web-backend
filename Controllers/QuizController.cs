@@ -14,7 +14,7 @@ namespace backend.Controllers
     [ApiController]
     public class QuizController : ControllerBase
     {
-        private readonly AppDbContext _context; // Injected AppDbContext
+        private readonly AppDbContext _context;
 
         public QuizController(AppDbContext context)
         {
@@ -138,7 +138,7 @@ namespace backend.Controllers
             }
         }
 
-        [HttpPost("record/quizzies/submission")]
+        [HttpPost("record/quizzies/submission"), Authorize(Roles = "Student")]
         public async Task<IActionResult> RecordQuizSubmission([FromBody] QuizDto quizDto)
         {
             Console.WriteLine("Record quizzes called");
@@ -194,7 +194,7 @@ namespace backend.Controllers
             }
         }
 
-        [HttpPost("record/submission")]
+        [HttpPost("record/submission"), Authorize(Roles = "Student")]
         public async Task<IActionResult> RecordSubmission([FromBody] SubmissionDto submission)
         {
             Console.WriteLine("Record submission called");
@@ -245,7 +245,7 @@ namespace backend.Controllers
         }
 
 
-        [HttpGet("get-record/quizId")]
+        [HttpGet("get-record/quizId"), Authorize]
         public async Task<IActionResult> GetQuizRecord([FromQuery] int quizId)
         {
             Console.WriteLine("Get Quiz Record called with quiz id as " + quizId);
@@ -322,7 +322,7 @@ namespace backend.Controllers
         }
 
 
-        [HttpGet("get-quizzes/catName")]
+        [HttpGet("get-quizzes/catName"), Authorize(Roles = "Teacher")]
         public async Task<IActionResult> GetQuizzesfromDb([FromQuery] string catName)
         {
             Console.WriteLine("Get Quizzes from Db called with category name: " + catName);
@@ -378,7 +378,7 @@ namespace backend.Controllers
         }
 
 
-        [HttpPost("add-quizzes/catName")]
+        [HttpPost("add-quizzes/catName"), Authorize(Roles = "Teacher")]
         public async Task<IActionResult> AddQuizzestoDb([FromQuery] string catName, [FromBody] AddQuizDto quizData)
         {
             Console.WriteLine("Received quiz data for category: " + catName);
@@ -482,7 +482,7 @@ namespace backend.Controllers
         }
 
 
-        [HttpPost("edit-quizzes/catName")]
+        [HttpPost("edit-quizzes/catName"), Authorize(Roles = "Teacher")]
         public async Task<IActionResult> EditQuizzesinDb([FromQuery] string catName, [FromBody] EditQuizDto quizData)
         {
             Console.WriteLine($"Received quiz data for editing with category name: {catName}");
@@ -588,7 +588,7 @@ namespace backend.Controllers
             }
         }
 
-        [HttpDelete("delete/quiz/{quizId}")] // Corrected route
+        [HttpDelete("delete/quiz/{quizId}"), Authorize(Roles = "Teacher")] // Corrected route
         public async Task<IActionResult> DeleteQuizfromDb(int quizId) // Removed FromQuery attribute
         {
             Console.WriteLine($"Received request to delete quiz with ID: {quizId}");
